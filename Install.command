@@ -10,7 +10,7 @@ else
     install_command_temp="$(mktemp -d "${TMPDIR:-/tmp}/sanju-snapdrive-command.XXXXXXXX")"
     curl --fail --location --silent --show-error --retry 3 --connect-timeout 15 --max-time 60 \
         --proto '=https' --tlsv1.2 \
-        'https://raw.githubusercontent.com/sanjuantala/sanju-snapdrive/v1.5.0/install.sh' \
+        'https://raw.githubusercontent.com/sanjuantala/sanju-snapdrive/v1.6.0/install.sh' \
         --output "$install_command_temp/install.sh"
     /bin/bash "$install_command_temp/install.sh" "$@"
 fi

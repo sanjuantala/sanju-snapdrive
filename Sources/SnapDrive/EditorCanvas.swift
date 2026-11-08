@@ -7,14 +7,40 @@ struct EditorCanvas: View {
     var body: some View {
         NativeEditorCanvas(model:model)
             .overlay(alignment:.bottom) {
-                Text(hint).font(.system(size:10)).foregroundStyle(.secondary).padding(.horizontal,12).padding(.vertical,5).background(.black.opacity(0.35),in:Capsule()).padding(.bottom,8).allowsHitTesting(false)
+                if model.tool == .crop, let image = model.image, let rect = model.cropSelection {
+                    cropControls(size:ImageEngine.pixelSize(image),rect:rect).padding(10)
+                } else {
+                    Text(hint).font(.system(size:10)).foregroundStyle(.secondary).padding(.horizontal,12).padding(.vertical,5).background(.black.opacity(0.35),in:Capsule()).padding(.bottom,8).allowsHitTesting(false)
+                }
             }
+    }
+    private func cropControls(size:CGSize,rect:CGRect)->some View {
+        HStack(spacing:9) {
+            VStack(alignment:.leading,spacing:2) {
+                Text("Crop frame").font(.system(size:11,weight:.semibold))
+                Text("\(Int((size.width*rect.width).rounded())) × \(Int((size.height*rect.height).rounded())) px").font(.system(size:10)).foregroundStyle(.secondary)
+            }.fixedSize()
+            Divider().frame(height:24)
+            ForEach(CropEdge.insets,id:\.self) { edge in
+                VStack(alignment:.leading,spacing:2) {
+                    Text(edge.label).font(.system(size:9)).foregroundStyle(.secondary)
+                    TextField(edge.label,value:Binding(get:{model.cropInset(edge)},set:{model.setCropInset(edge,value:$0)}),format:.number.grouping(.never).precision(.fractionLength(0)))
+                        .textFieldStyle(.roundedBorder).font(.system(size:11,design:.monospaced)).frame(width:48)
+                        .accessibilityLabel(edge.label+" crop inset in pixels")
+                }
+            }
+            Button("Cancel") {model.cancelCropSelection()}.controlSize(.small)
+            Button("Apply crop") {model.applyCropSelection()}.buttonStyle(.borderedProminent).controlSize(.small)
+        }.padding(9).background(.regularMaterial,in:RoundedRectangle(cornerRadius:10))
+            .overlay(RoundedRectangle(cornerRadius:10).strokeBorder(.white.opacity(0.1)))
+            .shadow(color:.black.opacity(0.23),radius:9,y:4)
     }
     private var hint:String {
         switch model.tool {
+        case .hand:return "Drag to pan · You can also hold Space with any tool"
         case .select:return "Click to select · Drag to move · Drag handles to resize · Delete to remove · Double-click text to edit"
         case .text:return "Click to type · Return saves · Option-Return adds a line · Escape cancels"
-        case .crop:return "Drag a rectangle to crop the source image"
+        case .crop:return "Draw a crop frame · Adjust the edges · Return applies · Escape cancels"
         case .textselect:return "Drag over text to recognize and copy it"
         case .magnifier:return "Click to place a magnifier · Drag to choose its size · Adjust zoom in the sidebar"
         case .arrow:return "Drag to draw arrows · Hold Shift for straight angles · Draw again to add more · 1 selects · Delete removes the last arrow"
@@ -58,6 +84,12 @@ private struct NativeEditorCanvas:NSViewRepresentable {
     private var zoomSettlement:Task<Void,Never>?
     private var reloadScheduled=false
     private var suppressEditingClick=false
+    private var spaceHeld=false
+    private var cropDrag:(edge:CropEdge,start:CGPoint,rect:CGRect)?
+    private var panStart:(pointer:CGPoint,origin:CGPoint)?
+    private var panKeyMonitor:Any?
+    private var keyWindowObserver:NSObjectProtocol?
+    private var lastCursorTool:EditorTool?
     private var drawingStart:CGPoint?
     private var drawingEnd:CGPoint?
     private var drawingTool:EditorTool?
@@ -106,13 +138,39 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         }
     }
     required init?(coder:NSCoder){fatalError("init(coder:) is not supported")}
-    deinit{zoomSettlement?.cancel();if let focusObserver{NotificationCenter.default.removeObserver(focusObserver)};if let commitObserver{NotificationCenter.default.removeObserver(commitObserver)};if let zoomObserver{NotificationCenter.default.removeObserver(zoomObserver)}}
+    deinit{if let panKeyMonitor{NSEvent.removeMonitor(panKeyMonitor)};if let keyWindowObserver{NotificationCenter.default.removeObserver(keyWindowObserver)};zoomSettlement?.cancel();if let focusObserver{NotificationCenter.default.removeObserver(focusObserver)};if let commitObserver{NotificationCenter.default.removeObserver(commitObserver)};if let zoomObserver{NotificationCenter.default.removeObserver(zoomObserver)}}
+    override func viewDidMoveToWindow(){
+        super.viewDidMoveToWindow()
+        if let panKeyMonitor { NSEvent.removeMonitor(panKeyMonitor);self.panKeyMonitor=nil }
+        if let keyWindowObserver { NotificationCenter.default.removeObserver(keyWindowObserver);self.keyWindowObserver=nil }
+        spaceHeld=false;panStart=nil
+        guard let window else{return}
+        panKeyMonitor=NSEvent.addLocalMonitorForEvents(matching:[.keyDown,.keyUp]){[weak self] event in
+            guard event.keyCode==49 else{return event}
+            let released=event.type == .keyUp
+            let plain=event.modifierFlags.intersection([.command,.control,.option]).isEmpty
+            let windowNumber=event.windowNumber
+            let consumed=MainActor.assumeIsolated {
+                guard let self,let window=self.window,window.windowNumber==windowNumber else{return false}
+                if released && self.spaceHeld{self.setSpaceHeld(false);return true}
+                guard !released,plain,self.inlineEditor==nil,!(window.firstResponder is NSTextView),
+                      let clip=self.scrollHost?.contentView,
+                      window.firstResponder===self || clip.bounds.contains(clip.convert(window.mouseLocationOutsideOfEventStream,from:nil)) else{return false}
+                self.setSpaceHeld(true);return true
+            }
+            return consumed ? nil:event
+        }
+        keyWindowObserver=NotificationCenter.default.addObserver(forName:NSWindow.didResignKeyNotification,object:window,queue:.main){[weak self] _ in
+            MainActor.assumeIsolated{self?.panStart=nil;self?.setSpaceHeld(false)}
+        }
+    }
     func reload(){
+        if lastCursorTool != model.tool {lastCursorTool=model.tool;window?.invalidateCursorRects(for:self)}
         let selected = model.selectedID.flatMap { id in model.annotations.first(where: { $0.id == id }) }
         let selection = selected.map { "Selected " + $0.kind.rawValue + ($0.kind == .text ? ": " + String($0.text.prefix(80)) : "") } ?? "No selection"
         setAccessibilityValue("\(model.annotations.count) annotations. \(selection)")
         if inlineEditor != nil && (inlineHistoryID != model.currentHistoryID || inlineSource !== model.image){cancelInlineText()}
-        if lastHistoryID != model.currentHistoryID {clearDrag();zoomSettlement?.cancel();model.endZoomInteraction();lastHistoryID=model.currentHistoryID}
+        if lastHistoryID != model.currentHistoryID {panStart=nil;setSpaceHeld(false);clearDrag();zoomSettlement?.cancel();model.endZoomInteraction();lastHistoryID=model.currentHistoryID}
         needsDisplay=true
     }
     func updateGeometry(viewport:CGSize){
@@ -141,7 +199,33 @@ private struct NativeEditorCanvas:NSViewRepresentable {
             let path=NSBezierPath(rect:rect);path.lineWidth=1;path.setLineDash([4,3],count:2,phase:0);NSColor.controlAccentColor.setStroke();path.stroke()
             for (_,p) in EditorInteraction.handles(a,frame:sourceFrame,pixels:sourcePixels){let h=NSBezierPath(ovalIn:CGRect(x:p.x-4,y:p.y-4,width:8,height:8));NSColor.white.setFill();h.fill();NSColor.controlAccentColor.setStroke();h.lineWidth=1.5;h.stroke()}
         }
-        if let a=drawingStart,let b=drawingEnd,let tool=drawingTool{drawDraft(from:a,to:b,tool:tool)}
+        if model.tool == .crop {
+            if drawingTool == .crop,let a=drawingStart,let b=drawingEnd {drawCropFrame(CGRect(x:min(a.x,b.x),y:min(a.y,b.y),width:abs(a.x-b.x),height:abs(a.y-b.y)))}
+            else if let rect=model.cropSelection {drawCropFrame(displayCrop(rect))}
+        } else if let a=drawingStart,let b=drawingEnd,let tool=drawingTool{drawDraft(from:a,to:b,tool:tool)}
+    }
+    private func displayCrop(_ rect:CGRect)->CGRect {
+        CGRect(x:sourceFrame.minX+rect.minX*sourceFrame.width,y:sourceFrame.minY+rect.minY*sourceFrame.height,width:rect.width*sourceFrame.width,height:rect.height*sourceFrame.height)
+    }
+    private func drawCropFrame(_ rect:CGRect){
+        guard rect.width>0,rect.height>0,let context=NSGraphicsContext.current?.cgContext else{return}
+        context.saveGState()
+        context.setFillColor(NSColor.black.withAlphaComponent(0.47).cgColor)
+        context.addRect(sourceFrame);context.addRect(rect);context.drawPath(using:.eoFill)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.55).cgColor);context.setLineWidth(1)
+        for value:CGFloat in [1/3,2/3] {
+            let x=rect.minX+rect.width*value,y=rect.minY+rect.height*value
+            context.move(to:CGPoint(x:x,y:rect.minY));context.addLine(to:CGPoint(x:x,y:rect.maxY))
+            context.move(to:CGPoint(x:rect.minX,y:y));context.addLine(to:CGPoint(x:rect.maxX,y:y))
+        }
+        context.strokePath()
+        NSColor.controlAccentColor.setStroke();let outline=NSBezierPath(rect:rect);outline.lineWidth=2;outline.stroke()
+        NSColor.white.setFill()
+        for (_,point) in EditorInteraction.cropHandles(in:rect) {
+            let dot=NSBezierPath(roundedRect:CGRect(x:point.x-4,y:point.y-4,width:8,height:8),xRadius:2,yRadius:2)
+            dot.fill();dot.lineWidth=1.5;dot.stroke()
+        }
+        context.restoreGState()
     }
     private func drawCheckerboard(_ rect:CGRect,dirty:CGRect){
         let visible=rect.intersection(visibleRect).intersection(dirty)
@@ -173,7 +257,32 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         if [.redact,.pixelate,.blur,.crop,.textselect].contains(tool){color.withAlphaComponent(0.18).setFill();path.fill()}
         color.setStroke();path.lineWidth=2;path.setLineDash([5,3],count:2,phase:0);path.stroke()
     }
-    override func resetCursorRects(){addCursorRect(bounds,cursor:model.tool == .select ? .arrow:model.tool == .text ? .iBeam:.crosshair)}
+    private var canvasCursor:NSCursor {
+        if panStart != nil{return .closedHand}
+        if spaceHeld || model.tool == .hand{return .openHand}
+        return model.tool == .select ? .arrow:model.tool == .text ? .iBeam:.crosshair
+    }
+    override func resetCursorRects(){
+        addCursorRect(bounds,cursor:canvasCursor)
+        if model.tool == .crop,!spaceHeld,panStart==nil,let selection=model.cropSelection {
+            let rect=displayCrop(selection)
+            addCursorRect(rect,cursor:.openHand)
+            for (edge,point) in EditorInteraction.cropHandles(in:rect) {
+                addCursorRect(CGRect(x:point.x-8,y:point.y-8,width:16,height:16),cursor:edge.cursor)
+            }
+        }
+    }
+    private func setSpaceHeld(_ held:Bool){
+        guard held != spaceHeld else{return}
+        spaceHeld=held;window?.invalidateCursorRects(for:self)
+    }
+    override func resignFirstResponder()->Bool{
+        setSpaceHeld(false)
+        return super.resignFirstResponder()
+    }
+    override func keyUp(with event:NSEvent){
+        if event.keyCode==49 && spaceHeld{setSpaceHeld(false)}else{super.keyUp(with:event)}
+    }
 
     override func mouseDown(with event:NSEvent){
         let wasEditing=inlineEditor != nil || suppressEditingClick
@@ -181,9 +290,19 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         commitInlineText();window?.makeFirstResponder(self)
         let p=convert(event.locationInWindow,from:nil)
         clearDrag()
+        if (spaceHeld || model.tool == .hand),let clip=scrollHost?.contentView {
+            panStart=(event.locationInWindow,clip.bounds.origin)
+            window?.invalidateCursorRects(for:self);NSCursor.closedHand.set();return
+        }
         if wasEditing{model.selectAnnotation(nil);needsDisplay=true;return}
         guard model.previewIsCurrent else{model.status="Updating preview…";return}
-        if model.tool == .select {
+        if model.tool == .crop {
+            if let selection=model.cropSelection,let edge=EditorInteraction.cropEdge(at:p,in:displayCrop(selection)){
+                cropDrag=(edge,EditorInteraction.normalized(p,in:sourceFrame,clamp:false),selection)
+                return
+            }
+            if sourceFrame.contains(p){drawingStart=p;drawingEnd=p;drawingTool = .crop}
+        } else if model.tool == .select {
             if let id=model.selectedID,let selected=model.annotations.first(where:{$0.id==id}),let handle=EditorInteraction.handle(at:p,annotation:selected,frame:sourceFrame,pixels:sourcePixels){
                 originalAnnotation=selected;dragStart=p;activeHandle=handle.0;grabOffset=CGPoint(x:p.x-handle.1.x,y:p.y-handle.1.y);_ = model.beginAnnotationEdit(id:id)
             } else if let id=EditorInteraction.hitTest(p,annotations:model.annotations,frame:sourceFrame,pixels:sourcePixels),let selected=model.annotations.first(where:{$0.id==id}){
@@ -200,8 +319,16 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         needsDisplay=true
     }
     override func mouseDragged(with event:NSEvent){
+        if let start=panStart,let host=scrollHost {
+            let clip=host.contentView,point=event.locationInWindow
+            let target=CGPoint(x:start.origin.x-(point.x-start.pointer.x),y:start.origin.y+(point.y-start.pointer.y))
+            clip.scroll(to:clip.constrainBoundsRect(CGRect(origin:target,size:clip.bounds.size)).origin)
+            host.reflectScrolledClipView(clip)
+            return
+        }
         autoscroll(with:event)
         let p=convert(event.locationInWindow,from:nil)
+        if updateCropDrag(at:p) {return}
         if let original=originalAnnotation,let start=dragStart{
             let changed:Annotation
             if let activeHandle{let target=CGPoint(x:p.x-grabOffset.x,y:p.y-grabOffset.y);changed=EditorInteraction.resized(original,handle:activeHandle,to:EditorInteraction.normalized(target,in:sourceFrame),pixels:sourcePixels)}
@@ -218,7 +345,15 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         if drawingTool == .arrow,modifiers.contains(.shift),let start=drawingStart{return EditorInteraction.constrainedArrowEnd(from:start,to:point,in:sourceFrame)}
         return EditorInteraction.point(EditorInteraction.normalized(point,in:sourceFrame),in:sourceFrame)
     }
+    private func updateCropDrag(at point:CGPoint)->Bool {
+        guard let drag=cropDrag else{return false}
+        let target=EditorInteraction.normalized(point,in:sourceFrame,clamp:false)
+        model.cropSelection=EditorInteraction.adjustCrop(drag.rect,edge:drag.edge,delta:CGPoint(x:target.x-drag.start.x,y:target.y-drag.start.y),pixels:sourcePixels)
+        needsDisplay=true;return true
+    }
     override func mouseUp(with event:NSEvent){
+        if panStart != nil {panStart=nil;window?.invalidateCursorRects(for:self);canvasCursor.set();return}
+        if updateCropDrag(at:convert(event.locationInWindow,from:nil)){cropDrag=nil;window?.invalidateCursorRects(for:self);return}
         if originalAnnotation != nil{model.finishAnnotationEdit();clearDrag();needsDisplay=true;return}
         defer{clearDrag();needsDisplay=true}
         guard let start=drawingStart,let tool=drawingTool else{return}
@@ -226,7 +361,10 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         let rect=CGRect(x:min(a.x,b.x),y:min(a.y,b.y),width:abs(a.x-b.x),height:abs(a.y-b.y))
         if tool == .crop || tool == .textselect{
             guard rect.width*sourceFrame.width>4,rect.height*sourceFrame.height>4 else{return}
-            if tool == .crop{model.crop(rect)}else{model.recognize(copy:true,region:rect)};return
+            if tool == .crop{
+                model.cropSelection=EditorInteraction.pixelCrop(rect,pixels:sourcePixels)
+                window?.invalidateCursorRects(for:self)
+            }else{model.recognize(copy:true,region:rect)};return
         }
         if tool == .magnifier {
             let circle: CGRect
@@ -254,17 +392,30 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         }
         guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty else{super.keyDown(with:event);return}
         switch event.keyCode{
+        case 49:setSpaceHeld(true)
+        case 36,76:
+            if model.tool == .crop && model.cropSelection != nil{model.applyCropSelection()}
+            else{super.keyDown(with:event)}
         case 51,117:model.removeSelected();needsDisplay=true
         case 53:
+            if panStart != nil || spaceHeld {panStart=nil;setSpaceHeld(false);window?.invalidateCursorRects(for:self);return}
+            if model.tool == .crop {
+                clearDrag();model.cancelCropSelection();window?.invalidateCursorRects(for:self);needsDisplay=true;return
+            }
             if originalAnnotation != nil{model.finishAnnotationEdit(cancelled:true)}
             clearDrag();model.selectAnnotation(nil);needsDisplay=true
         case 123,124,125,126:
             let amount:CGFloat=event.modifierFlags.contains(.shift) ? 10:1
             let dx:CGFloat=event.keyCode==123 ? -amount:event.keyCode==124 ? amount:0
             let dy:CGFloat=event.keyCode==126 ? -amount:event.keyCode==125 ? amount:0
-            model.nudgeSelected(delta:CGPoint(x:dx/max(1,sourcePixels.width),y:dy/max(1,sourcePixels.height)));needsDisplay=true
+            let delta=CGPoint(x:dx/max(1,sourcePixels.width),y:dy/max(1,sourcePixels.height))
+            if model.tool == .crop,let rect=model.cropSelection {
+                model.cropSelection=EditorInteraction.adjustCrop(rect,edge:.move,delta:delta,pixels:sourcePixels)
+                window?.invalidateCursorRects(for:self)
+            } else {model.nudgeSelected(delta:delta)}
+            needsDisplay=true
         default:
-            if let shortcut=event.charactersIgnoringModifiers,let tool=EditorTool.fromShortcut(shortcut){if tool != .select{model.selectAnnotation(nil)};model.tool=tool;window?.invalidateCursorRects(for:self)}
+            if let shortcut=event.charactersIgnoringModifiers,let tool=EditorTool.fromShortcut(shortcut){if tool != .select && tool != .hand{model.selectAnnotation(nil)};model.tool=tool;window?.invalidateCursorRects(for:self)}
             else if let n=Int(event.charactersIgnoringModifiers ?? ""),n>=0,n<=9{let index=n==0 ? 9:n-1;if EditorTool.allCases.indices.contains(index){model.tool=EditorTool.allCases[index];window?.invalidateCursorRects(for:self)}}
             else{super.keyDown(with:event)}
         }
@@ -333,7 +484,7 @@ private struct NativeEditorCanvas:NSViewRepresentable {
         }
     }
     func finishCanvasZoom(){zoomSettlement?.cancel();zoomSettlement=nil;model.endZoomInteraction()}
-    private func clearDrag(){drawingStart=nil;drawingEnd=nil;drawingTool=nil;originalAnnotation=nil;dragStart=nil;activeHandle=nil;grabOffset = .zero}
+    private func clearDrag(){cropDrag=nil;drawingStart=nil;drawingEnd=nil;drawingTool=nil;originalAnnotation=nil;dragStart=nil;activeHandle=nil;grabOffset = .zero}
 
     func beginInlineText(at point:CGPoint,replacing annotation:Annotation?){
         commitInlineText();clearDrag()

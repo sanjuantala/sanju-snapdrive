@@ -15,7 +15,7 @@ import zipfile
 
 PROJECT = Path(__file__).resolve().parents[1]
 APP = "Sanju's SnapDrive.app"
-ASSET = 'Sanju-SnapDrive-1.5.0-macOS.zip'
+ASSET = 'Sanju-SnapDrive-1.6.0-macOS.zip'
 TOOLS = r'''
 import json, os, pathlib, shutil, stat, subprocess, sys, zipfile
 root = pathlib.Path(os.environ['INSTALL_FIXTURE_ROOT'])
@@ -82,7 +82,7 @@ class InstallerChecks(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def make_app(self, folder, bundle='com.snapdrive.screenshot', version='1.5.0', marker='new'):
+    def make_app(self, folder, bundle='com.snapdrive.screenshot', version='1.6.0', marker='new'):
         (folder/'Contents/MacOS').mkdir(parents=True)
         (folder/'Contents/Helpers').mkdir()
         (folder/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':bundle,'CFBundleShortVersionString':version}))
@@ -90,7 +90,7 @@ class InstallerChecks(unittest.TestCase):
             p=folder/path; p.write_text('#!/bin/sh\nexit 0\n'); p.chmod(0o755)
         (folder/'marker').write_text(marker)
 
-    def make_release(self, bundle='com.snapdrive.screenshot', version='1.5.0', extra=None, missing=None, symlink=False):
+    def make_release(self, bundle='com.snapdrive.screenshot', version='1.6.0', extra=None, missing=None, symlink=False):
         source=self.root/'release-source'
         if source.exists(): shutil.rmtree(source)
         self.make_app(source/APP,bundle,version)
@@ -283,7 +283,7 @@ class InstallerChecks(unittest.TestCase):
         standalone=self.root/'Install.command'; shutil.copyfile(PROJECT/'Install.command',standalone)
         result=subprocess.run(['/bin/bash',str(standalone),'--no-open','--destination',str(self.destination)],env=self.env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         self.assertEqual(result.returncode,0,result.stdout)
-        script_url='https://raw.githubusercontent.com/sanjuantala/sanju-snapdrive/v1.5.0/install.sh'
+        script_url='https://raw.githubusercontent.com/sanjuantala/sanju-snapdrive/v1.6.0/install.sh'
         self.assertTrue(any(script_url in call for call in self.calls('curl')))
 
     def test_help_is_read_only(self):

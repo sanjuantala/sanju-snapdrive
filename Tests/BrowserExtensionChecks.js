@@ -7,7 +7,7 @@ assert(!manifest.host_permissions&&!manifest.content_scripts&&!manifest.external
 assert.strictEqual(manifest.background.service_worker,'capture-worker.js');
 const id=crypto.createHash('sha256').update(Buffer.from(manifest.key,'base64')).digest('hex').slice(0,32).split('').map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 assert.strictEqual(id,'onchblaldmgmldajccljklnjonkicpnf');
-for(const file of ['popup.html','popup.css','popup.js','capture-worker.js','capture-core.js','page-actions.js',...Object.values(manifest.icons)]) assert(fs.existsSync(path.join(root,file)));
+for(const file of ['popup.html','popup.css','popup.js','capture-worker.js','capture-core.js','page-actions.js','capture-store.js','capture-ui.js','ui.css','editor.html','editor.js','editor-core.js','editor.css','result.html','result.js','result.css','icons/interface.svg','icons/toolkit.svg',...Object.values(manifest.icons)]) assert(fs.existsSync(path.join(root,file)));
 const C=require(path.join(root,'capture-core.js'));let checks=0;
 function test(value,message){assert(value,message);checks++;}
 function equal(actual,expected,message){assert.deepStrictEqual(actual,expected,message);checks++;}
@@ -26,17 +26,23 @@ equal(C.region({x:-5,y:-5,width:20,height:20},{width:100,height:100},200,200),{x
 for(const block of [()=>C.plan(100,100000,100,100),()=>C.plan(0,100,100,100),()=>C.dimensions(40000,20,1,1),()=>C.dimensions(10000,10000,1,1),()=>C.dimensions(NaN,10,1,1),()=>C.region({x:10,y:10,width:0,height:1},{width:100,height:100},100,100)]) {assert.throws(block);checks++;}
 // Popup delegates to worker, prevents duplicate starts, exposes cancellation, and displays progress.
 let handlers={},requests=[],poll;const buttons=['full','visible','region'].map(mode=>({dataset:{mode},disabled:false,addEventListener(_,f){handlers[mode]=f;}}));
-const status={textContent:'',className:''},cancel={hidden:true,addEventListener(_,f){handlers.cancel=f;}},setup={open:false};
+const nodes={};
+for(const id of ['status','cancel','setup','settings','latest','shortcuts','resolution'])nodes[id]={textContent:'',className:'',hidden:true,value:'',addEventListener(_,f){handlers[id]=f;},setAttribute(){}};
+const {status,setup}=nodes;
 let workerResponse={ok:true},pendingResolve,closedPopup=0;
-const popupContext={window:{close(){closedPopup++;}},document:{querySelectorAll(){return buttons;},getElementById(id){return {status,cancel,setup,resolution:{value:'native'}}[id];}},setInterval(f){poll=f;},chrome:{tabs:{async query(){return [{id:3,windowId:7}];}},runtime:{async sendMessage(message){requests.push(message);if(message.action==='status')return {busy:false,message:'Ready'};if(message.action==='cancel')return {ok:true};if(pendingResolve)return new Promise(resolve=>pendingResolve.push(resolve));return workerResponse;}}}};
+const popupContext={window:{close(){closedPopup++;}},document:{querySelectorAll(){return buttons;},getElementById(id){return nodes[id];}},localStorage:{getItem(){return '1x';},setItem(){}},SnapCaptureStore:{async latest(){return {id:'recent'};}},setInterval(f){poll=f;},chrome:{tabs:{async query(){return [{id:3,windowId:7}];}},runtime:{async sendMessage(message){requests.push(message);if(message.action==='status')return {busy:false,message:''};if(message.action==='cancel'||message.action==='showResult')return {ok:true};if(pendingResolve)return new Promise(resolve=>pendingResolve.push(resolve));return workerResponse;}}}};
 vm.runInNewContext(fs.readFileSync(path.join(root,'popup.js'),'utf8'),popupContext);
 (async()=>{
   await Promise.resolve();const first=handlers.full(),duplicate=handlers.visible();await Promise.all([first,duplicate]);
   equal(requests.filter(r=>r.action==='startCapture').length,1,'Duplicate popup starts suppressed');
-  test(requests.find(r=>r.action==='startCapture').mode==='full','Full page requested');test(status.className==='success','Success shown');
-  workerResponse={ok:false,error:'Connect the Mac app first'};await handlers.region();test(status.className==='error'&&setup.open,'Connection errors visible');
+  test(requests.find(r=>r.action==='startCapture').mode==='full','Full page requested');test(closedPopup===1,'Popup closes after editor opens');
+  equal(requests.find(r=>r.action==='startCapture').delivery,'editor','Browser editor is the default');
+  equal(requests.find(r=>r.action==='startCapture').resolution,'1x','Saved quality preference used');
+  await handlers.latest();test(requests.some(r=>r.action==='showResult'&&r.id==='recent'),'Latest opens a compact preview');
+  workerResponse={ok:false,error:'Cannot capture this tab'};await handlers.region();test(status.className.includes('error')&&!status.hidden,'Capture errors visible');
+  handlers.settings();test(!setup.hidden,'Settings open on demand');
   pendingResolve=[];const pending=handlers.visible();await Promise.resolve();await handlers.cancel();test(requests.some(r=>r.action==='cancel'),'Cancel sent');pendingResolve[0]({ok:false,error:'Capture cancelled.'});await pending;pendingResolve=null;
   test(buttons.every(button=>button.disabled===false),'Buttons recover after cancellation');
-  workerResponse={ok:true,started:true};await handlers.region();test(closedPopup===1,'Region popup closes after worker acknowledgement');test(requests.filter(r=>r.action==='startCapture').at(-1).detach===true,'Region requests detached background selection');
+  workerResponse={ok:true,started:true};await handlers.region();test(closedPopup===3,'Region popup closes after worker acknowledgement');test(requests.filter(r=>r.action==='startCapture').at(-1).detach===true,'Region requests detached background selection');
   console.log(`PASS: ${checks} browser geometry/popup checks + permissions, fixed identity, complete packaged files`);
 })().catch(error=>{console.error(error);process.exit(1);});

@@ -4,8 +4,8 @@
 <key>CFBundleName</key><string>Sanju's SnapDrive</string>
 <key>CFBundleDisplayName</key><string>Sanju's SnapDrive</string>
 <key>CFBundleIdentifier</key><string>com.snapdrive.screenshot</string>
-<key>CFBundleVersion</key><string>8</string>
-<key>CFBundleShortVersionString</key><string>1.5.0</string>
+<key>CFBundleVersion</key><string>9</string>
+<key>CFBundleShortVersionString</key><string>1.6.0</string>
 <key>CFBundleExecutable</key><string>SnapDrive</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>

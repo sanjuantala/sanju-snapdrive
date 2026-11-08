@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SnapDrive Screenshot Editor</title><link rel="stylesheet" href="ui.css"><link rel="stylesheet" href="editor.css"></head>
+<body>
+<header class="editor-head">
+  <div class="brand"><span class="brand-mark"><svg aria-hidden="true"><use href="icons/interface.svg#brand"/></svg></span><div><strong>SnapDrive Editor</strong><small id="meta">Loading capture…</small></div></div>
+  <div class="export" aria-label="Screenshot actions">
+    <button id="mac" class="control" disabled><svg aria-hidden="true"><use href="icons/interface.svg#mac"/></svg> Edit in Mac App</button>
+    <button id="download" class="control" disabled><svg aria-hidden="true"><use href="icons/interface.svg#download"/></svg> Download PNG</button>
+    <button id="copy" class="control primary" disabled><svg aria-hidden="true"><use href="icons/interface.svg#copy"/></svg> Copy image</button>
+  </div>
+</header>
+<div class="layout">
+  <aside class="inspector" aria-label="Editor tools">
+    <header class="toolbox-head">
+      <div><span class="eyebrow">SCREENSHOT STUDIO</span><h1>Tools</h1></div>
+      <span class="local-badge"><i></i> Local</span>
+    </header>
+    <div id="tools" class="toolbox" aria-label="Editor tools">
+      <section class="tool-group navigate" aria-labelledby="navigate-label">
+        <h2 id="navigate-label">Navigate</h2><div class="tool-grid" id="tools-navigate"></div>
+      </section>
+      <section class="tool-group annotate" aria-labelledby="annotate-label">
+        <h2 id="annotate-label">Annotate</h2><div class="tool-grid" id="tools-annotate"></div>
+      </section>
+      <section class="tool-group refine" aria-labelledby="refine-label">
+        <h2 id="refine-label">Refine</h2><div class="tool-grid" id="tools-refine"></div>
+      </section>
+    </div>
+    <section id="style-panel" class="style-panel" aria-label="Tool appearance">
+      <div class="style-heading"><strong id="style-title">Arrow style</strong></div>
+      <div id="style-color" class="color-row">
+        <div id="swatches" role="group" aria-label="Ink colors"></div>
+        <label class="custom-color" title="Custom ink color"><input id="color" type="color" value="#6141d3" aria-label="Custom ink color"><span>+</span></label>
+      </div>
+      <label id="style-stroke" class="style-row"><span>Stroke</span><span class="unit"><input id="width" type="number" min="1" max="100" value="6" aria-label="Stroke width"> px</span></label>
+      <label id="style-size" class="style-row" hidden><span>Text size</span><span class="unit"><input id="size" type="number" min="10" max="200" value="32" aria-label="Text size"> px</span></label>
+    </section>
+    <div class="tool-tip">
+      <span class="tip-icon" aria-hidden="true">✦</span>
+      <p id="hint" class="help" aria-live="polite"></p>
+    </div>
+    <div class="history" role="group" aria-label="Edit history">
+      <button class="icon-only" id="undo" disabled aria-label="Undo" title="Undo"><svg aria-hidden="true"><use href="icons/interface.svg#undo"/></svg></button>
+      <button class="icon-only" id="redo" disabled aria-label="Redo" title="Redo"><svg aria-hidden="true"><use href="icons/interface.svg#redo"/></svg></button>
+      <button class="icon-only" id="delete" disabled aria-label="Delete selected mark" title="Delete selected mark"><svg aria-hidden="true"><use href="icons/interface.svg#trash"/></svg></button>
+      <button id="clear" class="link" disabled>Clear marks</button>
+    </div>
+  </aside>
+  <section class="workspace" aria-label="Screenshot workspace">
+    <div id="viewport" class="viewport">
+      <div class="stage"><canvas id="canvas" width="1" height="1" tabindex="0" aria-label="Screenshot canvas" hidden></canvas></div>
+      <p id="empty" class="help">Preparing your screenshot…</p>
+    </div>
+    <form id="text-entry" class="text-entry" hidden>
+      <label for="draft">Screenshot text</label>
+      <textarea id="draft" rows="2" maxlength="1500" placeholder="Type here"></textarea>
+      <button type="button" class="control" id="discard-text">Cancel</button>
+      <button type="submit" class="control primary">Apply</button>
+    </form>
+    <section id="selection-bar" class="selection-bar" aria-label="Adjust selection" hidden>
+      <div class="selection-label"><strong id="selection-title">Crop frame</strong><small id="selection-size">Drag to set a frame</small></div>
+      <div class="insets" aria-label="Insets in source pixels">
+        <label>Left <input type="number" id="inset-w" min="0" step="1" aria-label="Left inset in pixels"></label>
+        <label>Top <input type="number" id="inset-n" min="0" step="1" aria-label="Top inset in pixels"></label>
+        <label>Right <input type="number" id="inset-e" min="0" step="1" aria-label="Right inset in pixels"></label>
+        <label>Bottom <input type="number" id="inset-s" min="0" step="1" aria-label="Bottom inset in pixels"></label>
+      </div>
+      <button id="selection-cancel" class="control">Cancel</button>
+      <button id="selection-apply" class="control primary" disabled>Apply crop</button>
+    </section>
+    <section id="read-result" class="read-result" aria-label="Recognized text" hidden>
+      <label for="recognized"><strong>Recognized text</strong><small>Review or edit before copying.</small></label>
+      <textarea id="recognized" rows="2" spellcheck="false"></textarea>
+      <button id="read-dismiss" class="icon-only" aria-label="Close recognized text"><svg aria-hidden="true"><use href="icons/interface.svg#close"/></svg></button>
+      <button id="read-copy" class="control primary"><svg aria-hidden="true"><use href="icons/interface.svg#copy"/></svg> Copy text</button>
+    </section>
+    <footer class="workspace-foot">
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div class="zoom" aria-label="Canvas zoom"><button id="minus" type="button" aria-label="Zoom out">−</button><button id="fit" type="button" aria-label="Fit screenshot">Fit</button><button id="plus" type="button" aria-label="Zoom in">+</button></div>
+    </footer>
+  </section>
+</div>
+<script src="capture-store.js"></script><script src="capture-ui.js"></script><script src="editor-core.js"></script><script src="editor.js"></script>
+</body></html>

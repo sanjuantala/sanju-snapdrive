@@ -321,13 +321,17 @@ enum ImageEngine {
         return results
     }
 
-    static func crop(image: NSImage, rect: CGRect) -> NSImage? {
+    static func crop(image: NSImage, rect: CGRect, snapToPixel: Bool = false) -> NSImage? {
         guard [rect.origin.x, rect.origin.y, rect.size.width, rect.size.height].allSatisfy({ $0.isFinite }) else { return nil }
         guard let source = cgImage(image) else { return nil }
         let normalized = rect.standardized.intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
         guard !normalized.isNull, normalized.width > 0, normalized.height > 0 else { return nil }
         // CGImage.cropping uses pixel coordinates with origin at the image's top left.
-        let pixels = CGRect(x: normalized.minX * Double(source.width), y: normalized.minY * Double(source.height), width: normalized.width * Double(source.width), height: normalized.height * Double(source.height)).integral
+        let left = normalized.minX * Double(source.width), right = normalized.maxX * Double(source.width)
+        let top = normalized.minY * Double(source.height), bottom = normalized.maxY * Double(source.height)
+        let pixels = snapToPixel
+            ? CGRect(x: left.rounded(), y: top.rounded(), width: right.rounded()-left.rounded(), height: bottom.rounded()-top.rounded())
+            : CGRect(x: left, y: top, width: right-left, height: bottom-top).integral
         guard let cropped = source.cropping(to: pixels) else { return nil }
         let density = nativeScale(image: image)
         return bitmapImage(cgImage: cropped, logicalSize: CGSize(width: Double(cropped.width)/density, height: Double(cropped.height)/density))

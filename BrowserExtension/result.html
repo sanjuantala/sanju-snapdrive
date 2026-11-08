@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SnapDrive Quick Capture</title><link rel="stylesheet" href="ui.css"><link rel="stylesheet" href="result.css"></head>
+<body>
+<main>
+  <header><div class="brand"><span class="brand-mark"><svg aria-hidden="true"><use href="icons/interface.svg#brand"/></svg></span><div><strong>Screenshot ready</strong><small id="meta">Preparing preview…</small></div></div></header>
+  <div class="preview"><img id="preview" alt="Captured screenshot" hidden></div>
+  <div class="quick-actions">
+    <button id="copy" class="control primary" disabled><svg aria-hidden="true"><use href="icons/interface.svg#copy"/></svg> Copy image</button>
+    <button id="edit" class="control" disabled><svg aria-hidden="true"><use href="icons/interface.svg#edit"/></svg> Edit in Chrome</button>
+    <button id="mac" class="control" disabled><svg aria-hidden="true"><use href="icons/interface.svg#mac"/></svg> Edit in Mac App</button>
+    <button id="download" class="control" disabled aria-label="Download PNG" title="Download PNG"><svg aria-hidden="true"><use href="icons/interface.svg#download"/></svg></button>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">Only on this device</p>
+</main>
+<script src="capture-store.js"></script><script src="capture-ui.js"></script><script src="result.js"></script>
+</body></html>

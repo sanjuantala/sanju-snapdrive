@@ -95,7 +95,7 @@ struct EditorView: View {
                 ForEach(Array(EditorTool.allCases.enumerated()), id: \.element) { index, tool in
                     Button {
                         NotificationCenter.default.post(name: .snapDriveFocusCanvas, object: nil)
-                        if tool != .select { model.selectAnnotation(nil) }; model.tool = tool
+                        if tool != .select && tool != .hand { model.selectAnnotation(nil) }; model.tool = tool
                     } label: { ToolIcon(name: tool.rawValue) }
                         .buttonStyle(ToolIconButtonStyle(isSelected: model.tool == tool))
                         .accessibilityLabel(tool.title).accessibilityIdentifier("tool." + tool.rawValue)
@@ -272,6 +272,8 @@ struct EditorView: View {
                         shortcutRow("Capture region", capture.shortcutDisplay(for: .region))
                         shortcutRow("Capture window", capture.shortcutDisplay(for: .window))
                         shortcutRow("Capture screen", capture.shortcutDisplay(for: .fullscreen))
+                        shortcutRow("Capture region & copy", CaptureService.copyShortcut.display)
+                        shortcutRow("Pan canvas", "Space + drag")
                     }
                 }
             }

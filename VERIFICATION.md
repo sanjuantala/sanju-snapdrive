@@ -1,4 +1,13 @@
-# Version 1.5.0 verification
+# SnapDrive verification
+
+## Version 1.6.0
+
+- The full check run completed with **296 native interaction checks**, the browser capture, clipboard and editor suites, and **25 installer tests**. The native cases cover Space-drag and Hand movement on both axes without edits, exact crop insets and dimensions, applying with Enter, cancellation, and Undo restoring the original.
+- Live Chrome checks confirmed the light popup, the redesigned toolbox and illustrated icons, a lazy-loading full-page capture at 2,994 × 5,132 pixels, drawing an arrow, panning with Hand, copying a PNG, and the recognized-text copy confirmation. Tests ran on Apple silicon.
+- The signed browser helper also recognized both expected lines in a synthetic PNG and returned an empty result for a blank PNG with the real macOS Vision runtime. Protocol checks confirm text recognition receives only the selected image, does not write a file, and does not open the app.
+- The restricted standalone test run reported the Vision runtime and SwiftUI accessibility fixture as explicit skips. Native Vision and actual Chrome checks ran separately. Edge and Intel hardware were not tested live in this update.
+
+## Version 1.5.0
 
 ## Public GitHub package
 

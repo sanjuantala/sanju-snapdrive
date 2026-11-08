@@ -57,7 +57,11 @@ final class CaptureService: NSObject, ObservableObject {
     var onCaptureForClipboard: ((NSImage) -> Void)?
     /// Invoked after the capture is complete so the app can recreate a closed editor window.
     var onShowEditor: (() -> Void)?
+    var onCaptureStarted: (() -> Void)?
 
+    static let copyShortcut = CaptureShortcut(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(controlKey | optionKey | cmdKey))
+    private var copyHotKey: EventHotKeyRef?
+    private var restoreFocusAfterCapture = false
     private var hotKeys: [CaptureMode: EventHotKeyRef] = [:]
     private var eventHandler: EventHandlerRef?
     private var captureProcess: Process?
@@ -105,6 +109,10 @@ final class CaptureService: NSObject, ObservableObject {
                 let result = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &key)
                 guard result == noErr, key.signature == OSType(0x534E4452) else { return OSStatus(eventNotHandledErr) }
                 let service = Unmanaged<CaptureService>.fromOpaque(userData).takeUnretainedValue()
+                if key.id == 4 {
+                    Task { @MainActor in service.captureAndCopy(.region) }
+                    return noErr
+                }
                 let index = Int(key.id) - 1
                 guard CaptureMode.allCases.indices.contains(index) else { return OSStatus(eventNotHandledErr) }
                 let mode = CaptureMode.allCases[index]
@@ -114,6 +122,13 @@ final class CaptureService: NSObject, ObservableObject {
             guard result == noErr else { status = "Could not install global screenshot shortcuts (\(result)). Capture is available from the menu."; return }
         }
         for mode in CaptureMode.allCases { _ = register(mode) }
+        if copyHotKey == nil {
+            var reference: EventHotKeyRef?
+            let shortcut = Self.copyShortcut
+            if RegisterEventHotKey(shortcut.keyCode, shortcut.modifiers, EventHotKeyID(signature: signature, id: 4), GetApplicationEventTarget(), 0, &reference) == noErr {
+                copyHotKey = reference
+            }
+        }
     }
 
     /// Use macOS virtual key codes and Carbon modifiers. Existing binding is retained if the new one conflicts.
@@ -124,7 +139,7 @@ final class CaptureService: NSObject, ObservableObject {
             return false
         }
         let proposed = CaptureShortcut(keyCode: keyCode, modifiers: modifiers)
-        guard !shortcuts.contains(where: { $0.key != mode && $0.value == proposed }) else {
+        guard proposed != Self.copyShortcut, !shortcuts.contains(where: { $0.key != mode && $0.value == proposed }) else {
             status = "That shortcut is already assigned to another capture mode."
             return false
         }
@@ -174,6 +189,7 @@ final class CaptureService: NSObject, ObservableObject {
         guard ensureScreenAccess() else {
             return
         }
+        onCaptureStarted?()
         busy = true
         pendingMode = mode
         self.clipboardOnly = clipboardOnly
@@ -198,6 +214,7 @@ final class CaptureService: NSObject, ObservableObject {
                 guard self.activeCaptureID == captureID else { return }
                 self.remainingSeconds = 0
                 self.status = mode == .fullscreen ? "Capturing the main display…" : "Drag to select. Press Space for a window, or Escape to cancel."
+                self.restoreFocusAfterCapture = !clipboardOnly || NSApp.isActive
                 self.hiddenWindows = NSApp.windows.filter { $0.isVisible && $0.level == .normal }
                 self.hiddenWindows.forEach { $0.orderOut(nil) }
                 try await Task.sleep(nanoseconds: 250_000_000)
@@ -303,8 +320,13 @@ final class CaptureService: NSObject, ObservableObject {
         activeCaptureID = nil
         let windows = hiddenWindows
         hiddenWindows = []
-        windows.forEach { $0.makeKeyAndOrderFront(nil) }
-        if !windows.isEmpty { NSApp.activate(ignoringOtherApps: true) }
+        if restoreFocusAfterCapture {
+            windows.forEach { $0.makeKeyAndOrderFront(nil) }
+            if !windows.isEmpty { NSApp.activate(ignoringOtherApps: true) }
+        } else {
+            windows.forEach { $0.orderBack(nil) }
+        }
+        restoreFocusAfterCapture = false
     }
 
     func cancelCapture() {
@@ -320,6 +342,7 @@ final class CaptureService: NSObject, ObservableObject {
     }
 
     func uninstallGlobalShortcuts() {
+        if let copyHotKey { UnregisterEventHotKey(copyHotKey); self.copyHotKey = nil }
         for reference in hotKeys.values { UnregisterEventHotKey(reference) }
         hotKeys.removeAll()
         if let eventHandler { RemoveEventHandler(eventHandler); self.eventHandler = nil }

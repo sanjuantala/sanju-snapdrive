@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 # Downloads only the published release from sanjuantala/sanju-snapdrive.
-install_version="1.5.0"
+install_version="1.6.0"
 install_asset="Sanju-SnapDrive-${install_version}-macOS.zip"
 install_release="https://github.com/sanjuantala/sanju-snapdrive/releases/download/v${install_version}"
 install_app_name="Sanju's SnapDrive.app"

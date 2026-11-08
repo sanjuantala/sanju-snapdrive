@@ -50,6 +50,23 @@ import UniformTypeIdentifiers
         expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600, "Capture file private to current user")
         let directoryAttributes = try FileManager.default.attributesOfItem(atPath: cache.path)
         expect((directoryAttributes[.posixPermissions] as? NSNumber)?.intValue == 0o700, "Capture cache private to current user")
+        var ocrRequest = request
+        ocrRequest["action"] = "recognize"
+        let ocrPayload = try JSONSerialization.data(withJSONObject: ocrRequest)
+        let ocrCache = root.appendingPathComponent("recognition-does-not-store")
+        let recognized = try BrowserHostCore.handle(ocrPayload, directory: ocrCache, recognize: { data in
+            expect(data == png, "Only selected PNG bytes reach text recognition")
+            return "First line\nSecond line"
+        }, open: { _ in expect(false, "Recognition must not launch the editor") })
+        expect(recognized["text"] as? String == "First line\nSecond line", "Recognition response preserves lines")
+        expect(!FileManager.default.fileExists(atPath: ocrCache.path), "Recognition does not store a capture file")
+        let empty = try BrowserHostCore.handle(ocrPayload, directory: ocrCache, recognize: { _ in "" }, open: { _ in })
+        expect(empty["text"] as? String == "", "Empty recognition returns empty text")
+        ocrRequest["png"] = "file:///etc/passwd"
+        let invalidOCR = try JSONSerialization.data(withJSONObject: ocrRequest)
+        rejects("Recognition does not accept local file paths") {
+            _ = try BrowserHostCore.handle(invalidOCR, directory: ocrCache, recognize: { _ in expect(false, "Invalid PNG cannot reach Vision"); return "" }, open: { _ in })
+        }
         let countBefore = try FileManager.default.contentsOfDirectory(atPath: cache.path).count
         rejects("Failed app opening reported") { _ = try BrowserHostCore.handle(payload, directory: cache) { _ in throw BrowserHostCore.Failure.unavailable } }
         expect(try FileManager.default.contentsOfDirectory(atPath: cache.path).count == countBefore, "Failed transfer removes partial handoff")

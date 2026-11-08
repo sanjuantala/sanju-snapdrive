@@ -286,12 +286,22 @@ import SwiftUI
         // Crop remains undoable after moving from drawing/text selection tools.
         resetDocument()
         draw(.rectangle, point(0.3,0.3), point(0.6,0.6))
-        let beforeCrop = m.annotations
+        let beforeCrop = m.annotations, cropUndo=m.undoStack.count
         draw(.crop, point(0.25,0.25), point(0.75,0.75))
+        require(m.cropSelection != nil && ImageEngine.pixelSize(m.image!) == CGSize(width:600,height:400) && m.undoStack.count==cropUndo,"Drawing crop frame leaves source and Undo unchanged")
+        mouse(.leftMouseDown,point(0.75,0.5));mouse(.leftMouseDragged,point(0.8,0.5));mouse(.leftMouseUp,point(0.8,0.5))
+        require(m.cropInset(.right) == 120 && m.cropInset(.left) == 150,"Right crop handle moves independently")
+        mouse(.leftMouseDown,point(0.25,0.5));mouse(.leftMouseDragged,point(0.2,0.5));mouse(.leftMouseUp,point(0.2,0.5))
+        require(m.cropInset(.left) == 120 && m.cropInset(.right) == 120,"Left crop handle moves independently")
+        m.setCropInset(.top,value:75);m.setCropInset(.bottom,value:85)
+        require(m.cropInset(.top) == 75 && m.cropInset(.bottom) == 85,"Top and bottom accept precise pixel insets")
+        key(36,"\r")
         let cropPixels = ImageEngine.pixelSize(m.image!)
-        require(abs(cropPixels.width - 300) <= 2 && abs(cropPixels.height - 200) <= 2 && m.annotations.isEmpty, "Native crop uses selected source pixels and flattens annotations; got \(cropPixels), \(m.annotations.count) annotations, status=\(m.status)")
+        require(cropPixels == CGSize(width:360,height:240) && m.annotations.isEmpty && m.cropSelection == nil, "Apply uses exact crop pixels and preserves markup appearance; got \(cropPixels)")
         m.undo()
         require(ImageEngine.pixelSize(m.image!) == CGSize(width:600,height:400) && m.annotations == beforeCrop, "Undo crop restores image and annotation layers")
+        draw(.crop,point(0.2,0.2),point(0.8,0.8));key(53)
+        require(m.cropSelection==nil && ImageEngine.pixelSize(m.image!) == CGSize(width:600,height:400) && m.annotations==beforeCrop,"Escape cancels a pending crop without changing source or annotations")
 
         resetDocument()
         draw(.redact, point(0.7,0.65), point(0.9,0.85))
@@ -444,6 +454,25 @@ import SwiftUI
             await waitForCurrentPreview(m);host.reload()
             require(max(ImageEngine.pixelSize(m.preview!).width,ImageEngine.pixelSize(m.preview!).height)<=1800,"Fit starts with a bounded large-image preview")
             v.setCanvasZoom(1.5);await waitForCurrentPreview(m);host.reload()
+            let clip=host.contentView
+            let start=CGPoint(x:clip.bounds.midX,y:clip.bounds.midY)
+            let beforePan=clip.bounds.origin, priorTool=m.tool, priorEdits=m.annotations, priorUndo=m.undoStack.count
+            key(49," ")
+            mouse(.leftMouseDown,start)
+            mouse(.leftMouseDragged,CGPoint(x:start.x-60,y:start.y-40))
+            mouse(.leftMouseUp,CGPoint(x:start.x-60,y:start.y-40))
+            v.keyUp(with:NSEvent.keyEvent(with:.keyUp,location:.zero,modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,characters:" ",charactersIgnoringModifiers:" ",isARepeat:false,keyCode:49)!)
+            require(abs(clip.bounds.minX-beforePan.x-60)<2 && abs(clip.bounds.minY-beforePan.y-40)<2,"Space drag pans in both axes")
+            require(m.tool==priorTool && m.annotations==priorEdits && m.undoStack.count==priorUndo,"Space drag preserves tool, markup and Undo")
+            let afterSpace=clip.bounds.origin
+            key(4,"h")
+            let handStart=CGPoint(x:clip.bounds.midX,y:clip.bounds.midY)
+            mouse(.leftMouseDown,handStart)
+            mouse(.leftMouseDragged,CGPoint(x:handStart.x+30,y:handStart.y+20))
+            mouse(.leftMouseUp,CGPoint(x:handStart.x+30,y:handStart.y+20))
+            require(m.tool == .hand && abs(clip.bounds.minX-afterSpace.x+30)<2 && abs(clip.bounds.minY-afterSpace.y+20)<2,"Hand tool pans without a modifier")
+            require(m.annotations==priorEdits && m.undoStack.count==priorUndo,"Hand tool does not add an annotation or an Undo step")
+            m.tool=priorTool
             let visible=host.contentView.bounds
             let anchor=CGPoint(x:visible.minX+visible.width*0.43,y:visible.minY+visible.height*0.39)
             let windowAnchor=v.convert(anchor,to:nil),beforeAnchor=EditorInteraction.normalized(anchor,in:v.sourceFrame,clamp:false)

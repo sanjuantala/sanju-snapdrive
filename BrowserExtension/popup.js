@@ -1,25 +1,48 @@
 'use strict';
-const buttons=Array.from(document.querySelectorAll('[data-mode]'));
-const status=document.getElementById('status'), cancel=document.getElementById('cancel');
-let pending=false;
+const byId = id => document.getElementById(id);
+const buttons = [...document.querySelectorAll('[data-mode]')];
+const status = byId('status'), cancel = byId('cancel'), settings = byId('settings'), setup = byId('setup');
+let pending = false, latestId = null;
+const resolution = byId('resolution');
+resolution.value = localStorage.getItem('snapdrive.fullPageQuality') === '1x' ? '1x' : 'native';
+resolution.addEventListener('change', () => localStorage.setItem('snapdrive.fullPageQuality', resolution.value));
+settings.addEventListener('click', () => {
+  setup.hidden = !setup.hidden;
+  settings.setAttribute('aria-expanded', String(!setup.hidden));
+});
+byId('shortcuts').addEventListener('click', () => chrome.tabs.create({url:'chrome://extensions/shortcuts'}));
+byId('latest').addEventListener('click', async () => {
+  if (latestId) await chrome.runtime.sendMessage({action:'showResult',id:latestId});
+  window.close();
+});
 function display(state) {
-  const busy=Boolean(state?.busy)||pending;
-  buttons.forEach(button=>button.disabled=busy); cancel.hidden=!busy;
-  if(state?.message) status.textContent=state.message;
-  status.className=state?.error?'error':state?.success?'success':'';
-  if(state?.error && /connect|connection/i.test(state.message)) document.getElementById('setup').open=true;
+  const busy = Boolean(state?.busy) || pending;
+  buttons.forEach(button => button.disabled = busy);
+  byId('latest').disabled = busy || !latestId;
+  cancel.hidden = !busy;
+  status.hidden = !state?.message;
+  status.textContent = state?.message || '';
+  status.className = 'status' + (state?.error ? ' error' : state?.success ? ' success' : '');
 }
 async function capture(mode) {
-  if(pending) return; pending=true; display({busy:true,message:'Preparing capture…'});
+  if (pending) return;
+  pending = true; display({busy:true,message:'Preparing capture…'});
   try {
-    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-    if(!Number.isInteger(tab?.id)||!Number.isInteger(tab?.windowId)) throw new Error('No active browser tab.');
-    const result=await chrome.runtime.sendMessage({action:'startCapture',mode,tabId:tab.id,windowId:tab.windowId,resolution:document.getElementById('resolution').value,detach:mode==='region'});
-    if(result?.started){pending=false;window.close();return;}
-    pending=false; display(result?.ok?{success:true,message:'Opened in SnapDrive. Ready to edit.'}:{error:true,message:result?.error||'Capture could not finish. Please try again.'});
-  } catch(error) {pending=false;display({error:true,message:String(error?.message||error)});}
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!Number.isInteger(tab?.id) || !Number.isInteger(tab?.windowId)) throw new Error('No active browser tab.');
+    const result = await chrome.runtime.sendMessage({action:'startCapture',mode,tabId:tab.id,windowId:tab.windowId,resolution:resolution.value,delivery:'editor',detach:mode==='region'});
+    pending = false;
+    if (result?.started || result?.ok) { window.close(); return; }
+    display({error:true,message:result?.error || 'Capture did not finish. Try again.'});
+  } catch(error) { pending = false; display({error:true,message:error.message}); }
 }
-buttons.forEach(button=>button.addEventListener('click',()=>capture(button.dataset.mode)));
-cancel.addEventListener('click',async()=>{await chrome.runtime.sendMessage({action:'cancel'});status.textContent='Cancelling… Restoring the page.';});
-async function update() {try{const state=await chrome.runtime.sendMessage({action:'status'});if(state?.busy||!pending) display(state);}catch(_){} }
+buttons.forEach(button => button.addEventListener('click', () => capture(button.dataset.mode)));
+cancel.addEventListener('click', async () => {
+  await chrome.runtime.sendMessage({action:'cancel'});
+  display({busy:true,message:'Cancelling capture…'});
+});
+async function update() {
+  try { const state = await chrome.runtime.sendMessage({action:'status'}); if (state?.busy || !pending) display(state); } catch (_) {}
+}
+SnapCaptureStore.latest().then(entry => { latestId = entry?.id || null; update(); }, update);
 update(); setInterval(update,700);

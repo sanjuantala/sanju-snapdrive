@@ -25,12 +25,12 @@ Open **Sanju's SnapDrive** from your Applications folder. This release is not no
 - Style screenshots with backgrounds, padding, corners, shadows, and saved presets.
 - Crop, zoom, undo, redo, and clear the canvas without losing local history.
 - Export PNG or JPEG, copy an image, or drag it into another app.
-- Capture full pages, visible tabs, or selected areas with the included Chrome/Edge extension.
+- Capture full pages, visible tabs, or selected areas and mark them up in the Chrome/Edge editor.
 - Keep everything local by default, or save into a folder synced by Google Drive for desktop. Direct Drive uploads require an advanced [publisher-configured source build](GOOGLE_DRIVE_SETUP.md).
 
 ## Browser extension
 
-In the Mac app, choose **Image > Browser Extension...** and follow the setup steps. The extension opens screenshots directly in the editor. It supports Chrome and Edge; Safari is not included.
+In the Mac app, choose **Image > Browser Extension...** and follow the setup steps. Capture and edit in the light browser workspace. Adjust a crop before applying it, copy text from a selected area using the Mac connection, or continue with **Edit in Mac App**. Press **Option+Shift+X** in Chrome for a quick capture preview. After updating the app, click **Reload** on the extension card.
 
 See the [extension guide](BrowserExtension/README.md) for installation, full-page limits, and troubleshooting.
 
@@ -39,9 +39,11 @@ See the [extension guide](BrowserExtension/README.md) for installation, full-pag
 | Action | Shortcut |
 | --- | --- |
 | Open or paste an image | Cmd+O / Cmd+V |
+| Capture a region and copy it on Mac | Ctrl+Option+Cmd+C |
 | Select / arrow / text / magnifier | V / A / T / M |
 | Zoom in or out | Cmd + / Cmd - |
 | Fit / native pixels | Cmd+0 / Cmd+1 |
+| Pan the canvas | Space + drag, or Hand (H) |
 | Undo / redo | Cmd+Z / Cmd+Shift+Z |
 | Export | Cmd+S |
 | All shortcuts | Cmd+/ |

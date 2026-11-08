@@ -8,6 +8,8 @@ You can also open an image with **Cmd+O**, drop one into the window, or paste wi
 
 For capture permission, open **System Settings > Privacy & Security > Screen Recording**. On newer macOS versions this is called **Screen & System Audio Recording**. Reopen the app if macOS asks. You do not need screen permission to edit existing images.
 
+Use **Capture Region & Copy** or **Ctrl+Option+Cmd+C** to copy a styled screenshot and see a preview without switching away from the front app. Paste immediately, or click **Edit in Mac App** to adjust the screenshot and its appearance.
+
 Closing the editor leaves the app in the menu bar. Choose **Quit Sanju's SnapDrive** to exit completely.
 
 ## Annotate
@@ -24,11 +26,15 @@ Stroke accepts **0.5-1,000 native pixels** and font size accepts **8-512**. Type
 
 **Clear screenshot** empties the current canvas. Undo restores the screenshot and its edits. Use the Clear menu's **Clear annotations only** option to keep the source image.
 
+## Crop a screenshot
+
+Choose **Crop (C)** and draw a frame. Drag its corners or edges to resize, drag inside to move it, or enter the left, top, right, and bottom insets in pixels. Arrow keys move it one pixel, or ten with Shift. Press Enter or click **Apply crop** to commit; Esc cancels. Undo restores the original screenshot and editable marks.
+
 ## Style and inspect
 
 Choose an image, gradient, solid color, transparent background, custom image, or wallpaper. Adjust padding, inset, corners, shadows, ratio, filename, and watermark. Save the appearance as a preset to reuse it.
 
-Pinch, use **Cmd/Ctrl-scroll**, or press **Cmd + / Cmd -** to zoom. **Cmd+0** fits the image and **Cmd+1** shows native pixels. The zoom control also accepts a custom percentage. Preview scaling does not change export resolution.
+Pinch, use **Cmd/Ctrl-scroll**, or press **Cmd + / Cmd -** to zoom. **Cmd+0** fits the image and **Cmd+1** shows native pixels. The zoom control also accepts a custom percentage. Preview scaling does not change export resolution. Use **Hand (H)** or hold **Space** while dragging to pan at any zoom.
 
 Use the **Text Select** tool to recognize a chosen region. The recognized-text panel lets you copy individual lines or all text. Sensitive-data detection suggests redactions for supported patterns. Review the suggestions before sharing.
 

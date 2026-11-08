@@ -11,6 +11,21 @@ enum AnnotationHandle: Equatable {
     case start, end, topLeft, topRight, bottomLeft, bottomRight
 }
 
+enum CropEdge: CaseIterable {
+    case topLeft, topRight, bottomLeft, bottomRight, left, top, right, bottom, move
+    var pullsLeft: Bool { [.left,.topLeft,.bottomLeft].contains(self) }
+    var pullsRight: Bool { [.right,.topRight,.bottomRight].contains(self) }
+    var pullsTop: Bool { [.top,.topLeft,.topRight].contains(self) }
+    var pullsBottom: Bool { [.bottom,.bottomLeft,.bottomRight].contains(self) }
+    static let insets: [Self] = [.left,.top,.right,.bottom]
+    var label: String {
+        switch self {case .left:return "Left";case .top:return "Top";case .right:return "Right";case .bottom:return "Bottom";default:return ""}
+    }
+    var cursor: NSCursor {
+        switch self {case .left,.right:return .resizeLeftRight;case .top,.bottom:return .resizeUpDown;case .move:return .openHand;default:return .crosshair}
+    }
+}
+
 /// Shared by native mouse events and deterministic geometry checks. Coordinates use the source image's top left.
 enum EditorInteraction {
     static func point(_ normalized: CGPoint, in frame: CGRect) -> CGPoint {
@@ -19,6 +34,39 @@ enum EditorInteraction {
     static func normalized(_ point: CGPoint, in frame: CGRect, clamp: Bool = true) -> CGPoint {
         let p = CGPoint(x: (point.x-frame.minX)/max(0.0001,frame.width), y: (point.y-frame.minY)/max(0.0001,frame.height))
         return clamp ? CGPoint(x: bounded(p.x),y: bounded(p.y)) : p
+    }
+    static func cropHandles(in rect: CGRect) -> [(CropEdge,CGPoint)] {
+        [
+            (.topLeft,CGPoint(x:rect.minX,y:rect.minY)),(.topRight,CGPoint(x:rect.maxX,y:rect.minY)),
+            (.bottomLeft,CGPoint(x:rect.minX,y:rect.maxY)),(.bottomRight,CGPoint(x:rect.maxX,y:rect.maxY)),
+            (.left,CGPoint(x:rect.minX,y:rect.midY)),(.right,CGPoint(x:rect.maxX,y:rect.midY)),
+            (.top,CGPoint(x:rect.midX,y:rect.minY)),(.bottom,CGPoint(x:rect.midX,y:rect.maxY))
+        ]
+    }
+    static func cropEdge(at point: CGPoint, in rect: CGRect) -> CropEdge? {
+        cropHandles(in: rect).first { hypot($0.1.x-point.x,$0.1.y-point.y) <= 9 }?.0 ?? (rect.contains(point) ? .move : nil)
+    }
+    static func adjustCrop(_ rect:CGRect, edge:CropEdge, delta:CGPoint, pixels:CGSize) -> CGRect {
+        let xSize=max(1,pixels.width),ySize=max(1,pixels.height)
+        func roundX(_ value:CGFloat)->CGFloat{(value*xSize).rounded()/xSize}
+        func roundY(_ value:CGFloat)->CGFloat{(value*ySize).rounded()/ySize}
+        if edge == .move {
+            return CGRect(x:min(1-rect.width,max(0,roundX(rect.minX+delta.x))),y:min(1-rect.height,max(0,roundY(rect.minY+delta.y))),width:rect.width,height:rect.height)
+        }
+        var left=rect.minX,right=rect.maxX,top=rect.minY,bottom=rect.maxY
+        let minW=min(1,2/xSize),minH=min(1,2/ySize)
+        if edge.pullsLeft{left=min(right-minW,max(0,roundX(left+delta.x)))}
+        if edge.pullsRight{right=max(left+minW,min(1,roundX(right+delta.x)))}
+        if edge.pullsTop{top=min(bottom-minH,max(0,roundY(top+delta.y)))}
+        if edge.pullsBottom{bottom=max(top+minH,min(1,roundY(bottom+delta.y)))}
+        return CGRect(x:left,y:top,width:right-left,height:bottom-top)
+    }
+    static func pixelCrop(_ rect:CGRect,pixels:CGSize) -> CGRect? {
+        let x=max(1,pixels.width),y=max(1,pixels.height)
+        let left=min(x,max(0,rect.minX*x)).rounded(),right=min(x,max(0,rect.maxX*x)).rounded()
+        let top=min(y,max(0,rect.minY*y)).rounded(),bottom=min(y,max(0,rect.maxY*y)).rounded()
+        guard right-left>=2,bottom-top>=2 else{return nil}
+        return CGRect(x:left/x,y:top/y,width:(right-left)/x,height:(bottom-top)/y)
     }
     static func normalizedBounds(_ a: Annotation, pixels: CGSize) -> CGRect {
         if a.kind == .magnifier { return ImageEngine.magnifierBounds(a, pixels:pixels) }

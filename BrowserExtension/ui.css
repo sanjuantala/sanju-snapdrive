@@ -1,0 +1,32 @@
+:root {
+  color-scheme: light;
+  --ink:#1d1a30; --muted:#5e596e; --line:#e8e4f0; --accent:#5937cf; --accent-dark:#4926bc;
+  --paper:#fff; --surface:#f9f8fc; --lavender:#f0eaff; --green:#166b55;
+  font: 13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:var(--ink); background:var(--surface);
+}
+* {box-sizing:border-box}
+body {margin:0}
+button,input,select,textarea {font:inherit;color:inherit}
+button,a { -webkit-tap-highlight-color:transparent }
+button {cursor:pointer}
+button:disabled {cursor:default;opacity:.42}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible {outline:2px solid var(--accent);outline-offset:3px}
+[hidden] {display:none!important}
+svg {width:18px;height:18px; flex:none;vertical-align:middle;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.brand {display:flex;gap:10px;align-items:center;min-width:0}
+.brand-mark {display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:12px;background:linear-gradient(145deg,#7956ed,#4e2dbf);color:white;box-shadow:0 3px 8px #5637bf33}
+.brand-mark svg {width:24px;height:24px}
+.brand strong {display:block;font-size:15px;letter-spacing:-.025em;line-height:1.2}
+.brand small {display:block;margin-top:2px;color:var(--muted);font-size:11px}
+.control {display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;min-height:35px;padding:7px 11px;background:var(--paper);border:1px solid var(--line);border-radius:9px;font-weight:650;text-decoration:none;color:inherit}
+.control:hover:not(:disabled) {background:var(--lavender);border-color:#d6c9fb}
+.control.primary {background:var(--accent);border-color:var(--accent);color:white}
+.control.primary:hover:not(:disabled) {background:var(--accent-dark)}
+.icon-only {width:34px;height:34px;padding:0;display:grid;place-items:center;background:none;border:1px solid transparent;border-radius:9px;color:var(--muted)}
+.icon-only:hover:not(:disabled),.icon-only[aria-expanded=true] {background:var(--lavender);color:var(--accent)}
+.status {color:var(--muted);margin:0;min-height:17px;font-size:12px}
+.status.error {color:#a32d40}
+.status.success {color:var(--green)}
+.help {font-size:12px;color:var(--muted)}
+.help a {color:var(--accent)}

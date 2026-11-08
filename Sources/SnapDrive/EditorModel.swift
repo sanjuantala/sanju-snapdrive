@@ -8,15 +8,15 @@ struct HistoryItem: Codable, Identifiable {
     var id: UUID; var name: String; var date: Date; var style: EditorStyle; var annotations: [Annotation]; var upload: DriveUploadResult? = nil
 }
 enum EditorTool: String, CaseIterable {
-    case select, arrow, text, rectangle, ellipse, redact, pixelate, crop, blur, textselect, magnifier
-    var icon: String { switch self { case .select: return "cursorarrow"; case .arrow: return "arrow.up.right"; case .text: return "textformat"; case .rectangle: return "rectangle"; case .ellipse: return "circle"; case .redact: return "rectangle.fill"; case .pixelate: return "square.grid.3x3.fill"; case .crop: return "crop"; case .blur: return "drop.halffull"; case .textselect: return "text.viewfinder"; case .magnifier: return "plus.magnifyingglass" } }
+    case select, arrow, text, rectangle, ellipse, redact, pixelate, crop, blur, textselect, magnifier, hand
+    var icon: String { switch self { case .select: return "cursorarrow"; case .arrow: return "arrow.up.right"; case .text: return "textformat"; case .rectangle: return "rectangle"; case .ellipse: return "circle"; case .redact: return "rectangle.fill"; case .pixelate: return "square.grid.3x3.fill"; case .crop: return "crop"; case .blur: return "drop.halffull"; case .textselect: return "text.viewfinder"; case .magnifier: return "plus.magnifyingglass"; case .hand: return "hand.raised" } }
     var title: String { self == .textselect ? "Select text" : rawValue.capitalized }
     var annotationKind: AnnotationKind? { AnnotationKind(rawValue: rawValue) }
     var shortcutLetter: String {
         switch self {
         case .select:return "V";case .arrow:return "A";case .text:return "T";case .rectangle:return "R"
         case .ellipse:return "E";case .redact:return "X";case .pixelate:return "P";case .crop:return "C"
-        case .blur:return "B";case .textselect:return "O";case .magnifier:return "M"
+        case .blur:return "B";case .textselect:return "O";case .magnifier:return "M";case .hand:return "H"
         }
     }
     static func fromShortcut(_ value: String) -> EditorTool? { allCases.first { $0.shortcutLetter.lowercased() == value.lowercased() } }
@@ -38,15 +38,19 @@ private struct DrawingDefaults: Codable {
 }
 
 @MainActor final class EditorModel: ObservableObject {
-    @Published var image: NSImage? { didSet { if oldValue !== image { sourceDirty = true; preview = nil }; imageRevision += 1; invalidateRecognition() } }
+    @Published var image: NSImage? { didSet { if oldValue !== image { sourceDirty = true; preview = nil; cropSelection = nil }; imageRevision += 1; invalidateRecognition() } }
     @Published var preview: NSImage?
     @Published var style = EditorStyle() { didSet { refresh() } }
     @Published var annotations: [Annotation] = [] { didSet { imageRevision += 1; invalidateRecognition(); refresh() } }
     @Published var backgroundImage: NSImage? { didSet { if oldValue !== backgroundImage { backgroundDirty = true }; refresh() } }
+    @Published var cropSelection: CGRect?
     @Published var tool: EditorTool = .select {
         didSet {
             // An old object's appearance must never become the next drawing's default.
-            if oldValue != tool && tool != .select { selectedID = nil; syncSelectedAppearance() }
+            if oldValue != tool {
+                if tool != .crop { cropSelection = nil }
+                if tool != .select && tool != .hand { selectedID = nil; syncSelectedAppearance() }
+            }
         }
     }
     @Published var selectedID: UUID? { didSet { if selectedID != oldValue { syncSelectedAppearance() } } }
@@ -360,14 +364,15 @@ private struct DrawingDefaults: Codable {
         if autoMatchBackground, let hex = Self.averageColor(image) { style.solidHex = hex; style.background = "solid" }
         return (image, style)
     }
-    func load(_ original: NSImage, name: String = "Screenshot", captured: Bool = false, window: Bool = false) {
+    func load(_ original: NSImage, name: String = "Screenshot", captured: Bool = false, window: Bool = false,
+              appearance: EditorStyle? = nil, notifyNewImage: Bool = true) {
         importTask?.cancel(); importTask = nil; importID = nil
         commitActiveText()
         finishAnnotationEdit(); colorUndoGroup = nil
         persistCurrent()
         zoom = 0; zoomInteracting = false
         let stableOriginal = ImageEngine.materializedImage(original) ?? original
-        let prepared = captured ? captureAppearance(stableOriginal, window: window) : (image: stableOriginal, style: style)
+        let prepared = captured ? captureAppearance(stableOriginal, window: window) : (image: stableOriginal, style: appearance ?? style)
         let image = prepared.image; style = prepared.style
         self.image = image; uploadResult = nil; showUploadResult = false; lastSavedURL = nil; annotations = []; selectedID = nil; recognized = []; undoStack = []; redoStack = []; fileName = name; zoom = 0; tool = .arrow; textInput = ""
         let id = UUID(); currentHistoryID = id; sourceDirty = true; backgroundDirty = true
@@ -375,7 +380,7 @@ private struct DrawingDefaults: Codable {
         history.insert(HistoryItem(id: id, name: name, date: Date(), style: style, annotations: []), at: 0)
         while history.count > 100 { let removed = history.removeLast(); try? FileManager.default.removeItem(at: root.appendingPathComponent("\(removed.id).png")); try? FileManager.default.removeItem(at: root.appendingPathComponent("\(removed.id)-background.png")) }
         NSApp?.keyWindow?.makeFirstResponder(nil)
-        refresh(); persistCurrent(); status = "Ready to edit · All processing stays on your Mac"; onNewImage?()
+        refresh(); persistCurrent(); status = "Ready to edit · All processing stays on your Mac"; if notifyNewImage { onNewImage?() }
     }
     func open(_ url: URL? = nil) {
         guard let target = url else {
@@ -470,10 +475,35 @@ private struct DrawingDefaults: Codable {
         status = "Canvas cleared. Undo to restore your screenshot."
         showToast("Canvas cleared · Undo to restore")
     }
+    func cropInset(_ edge: CropEdge) -> Double {
+        guard let image,let rect=cropSelection else{return 0}
+        let size=ImageEngine.pixelSize(image)
+        switch edge {
+        case .left:return (rect.minX*size.width).rounded()
+        case .top:return (rect.minY*size.height).rounded()
+        case .right:return ((1-rect.maxX)*size.width).rounded()
+        case .bottom:return ((1-rect.maxY)*size.height).rounded()
+        default:return 0
+        }
+    }
+    func setCropInset(_ edge:CropEdge, value:Double) {
+        guard value.isFinite,let image,let rect=cropSelection else{return}
+        let size=ImageEngine.pixelSize(image),delta=value-cropInset(edge)
+        let x=delta/max(1,size.width),y=delta/max(1,size.height)
+        cropSelection=EditorInteraction.adjustCrop(rect,edge:edge,delta:CGPoint(x:edge == .left ? x:edge == .right ? -x:0,y:edge == .top ? y:edge == .bottom ? -y:0),pixels:size)
+    }
+    func applyCropSelection() {
+        guard let rect=cropSelection else{return}
+        crop(rect)
+    }
+    func cancelCropSelection() {cropSelection=nil}
+
     func crop(_ rect: CGRect) {
         commitActiveText()
-        guard let image else { return }
-        guard let flattened = ImageEngine.render(image: image, style: { var s = EditorStyle(); s.padding = 0; s.radius = 0; s.shadow = 0; s.background = "transparent"; return s }(), annotations: annotations), let result = ImageEngine.crop(image: flattened, rect: rect) else { return }
+        guard image != nil else { return }
+        guard let flattened = flattenedSource(), let result = ImageEngine.crop(image: flattened, rect: rect, snapToPixel: true) else {
+            error = "Could not apply this crop. Adjust the frame and try again."; return
+        }
         checkpoint(); self.image = result; annotations = []; recognized = []; selectedID = nil; tool = .select; refresh(); status = "Image cropped. Undo to restore."
     }
     func balance() {

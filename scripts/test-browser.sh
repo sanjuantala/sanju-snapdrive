@@ -10,6 +10,7 @@ xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos13.0" \
 node "$project_dir/Tests/BrowserExtensionChecks.js"
 node "$project_dir/Tests/BrowserWorkerChecks.js"
 node "$project_dir/Tests/BrowserPageChecks.js"
+node "$project_dir/Tests/BrowserEditorChecks.js"
 xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos13.0" \
   -module-cache-path "${SNAPDRIVE_MODULE_CACHE:-$test_dir/module-cache}" \
   "$project_dir/Sources/SnapDrive/BrowserBridge.swift" "$project_dir/Tests/BrowserSetupChecks.swift" -o "$test_dir/BrowserSetupChecks"

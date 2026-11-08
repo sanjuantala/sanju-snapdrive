@@ -1,8 +1,8 @@
 'use strict';
-importScripts('capture-core.js', 'page-actions.js');
+importScripts('capture-core.js', 'page-actions.js', 'capture-store.js');
 const HOST = 'com.snapdrive.browser';
 const MAX_PNG_BYTES = 40 * 1024 * 1024;
-let activeSession = null, lastCaptureAt = 0, lastStatus = {busy:false, message:'Ready to capture', mode:null};
+let activeSession = null, lastCaptureAt = 0, lastStatus = {busy:false, message:'', mode:null};
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 function check(session) { if (session.cancelled || activeSession !== session) throw new Error('Capture cancelled.'); }
 async function inject(session, func, args = []) {
@@ -29,7 +29,7 @@ async function screenshot(session) {
 async function bitmap(png) { return createImageBitmap(await (await fetch(png)).blob()); }
 async function progress(session, message, badge = '') {
   lastStatus = {busy:true, mode:session.mode, message, tabId:session.tabId};
-  await chrome.action.setBadgeBackgroundColor({color:'#9b86ed', tabId:session.tabId});
+  await chrome.action.setBadgeBackgroundColor({color:'#5937cf', tabId:session.tabId});
   await chrome.action.setBadgeText({text:badge, tabId:session.tabId});
 }
 function makeCanvas(width, height) {
@@ -135,13 +135,30 @@ function errorMessage(error) {
 async function run(message) {
   if (activeSession) return {ok:false,error:'A capture is already running. Cancel it or wait for it to finish.'};
   if (!['visible','region','full'].includes(message.mode) || !Number.isInteger(message.tabId) || !Number.isInteger(message.windowId)) return {ok:false,error:'Invalid capture request.'};
+  if (message.delivery && !['editor','result','native'].includes(message.delivery)) return {ok:false,error:'Invalid capture destination.'};
   const session={...message,token:crypto.randomUUID(),cancelled:false}; activeSession=session;
   try {
-    let png=await ({visible,region:selected,full:fullPage}[session.mode])(session);
-    check(session); await progress(session,'Opening native editor…','↗');
-    const response=await chrome.runtime.sendNativeMessage(HOST,{version:1,action:'capture',png}); png=null;
-    if (!response?.ok) throw new Error(response?.error||'The Mac app could not open this capture.');
-    lastStatus={busy:false,mode:session.mode,message:'Opened in SnapDrive. Ready to edit.',success:true};
+    const png=await ({visible,region:selected,full:fullPage}[session.mode])(session);
+    check(session);
+    if (session.delivery === 'editor' || session.delivery === 'result') {
+      await progress(session, 'Preparing your screenshot…', '…');
+      check(session);
+      const id = await SnapCaptureStore.put(await (await fetch(png)).blob(), session.mode);
+      check(session);
+      try {
+        if (session.delivery === 'editor') await chrome.tabs.create({windowId:session.windowId,url:chrome.runtime.getURL('editor.html#'+id)});
+        else await showResult(id);
+        lastStatus={busy:false,mode:session.mode,message:'',success:true};
+      } catch (_) {
+        lastStatus={busy:false,mode:session.mode,message:'Screenshot ready. Open Latest capture.',success:true};
+      }
+    } else {
+      // Compatibility with older popup clients while Chrome reloads the extension.
+      await progress(session,'Opening native editor…','↗');
+      const response=await chrome.runtime.sendNativeMessage(HOST,{version:1,action:'capture',png});
+      if (!response?.ok) throw new Error(response?.error||'The Mac app could not open this capture.');
+      lastStatus={busy:false,mode:session.mode,message:'Opened in SnapDrive. Ready to edit.',success:true};
+    }
     await chrome.action.setBadgeText({text:'✓',tabId:session.tabId});
     setTimeout(()=>chrome.action.setBadgeText({text:'',tabId:session.tabId}).catch(()=>{}),4000);
     return {ok:true};
@@ -155,10 +172,23 @@ async function run(message) {
     if(activeSession===session) activeSession=null;
   }
 }
+async function showResult(id) {
+  return chrome.windows.create({type:'popup',url:chrome.runtime.getURL('result.html#'+id),width:424,height:440,focused:true});
+}
+chrome.commands?.onCommand.addListener(async (command, tab) => {
+  if (!['capture-visible','capture-region'].includes(command) || activeSession) return;
+  const target = Number.isInteger(tab?.id) ? tab : (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0];
+  if (!Number.isInteger(target?.id) || !Number.isInteger(target?.windowId)) return;
+  await run({mode:command === 'capture-visible' ? 'visible' : 'region',tabId:target.id,windowId:target.windowId,delivery:'result'});
+});
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   // Only extension pages may request capture; no page-external message listener exists.
   if(sender.id!==chrome.runtime.id) return false;
   if(message?.action==='status') {reply(lastStatus);return false;}
+  if(message?.action==='showResult' && /^[0-9a-f-]{36}$/i.test(message.id || '')) {
+    showResult(message.id).then(() => reply({ok:true}), () => reply({ok:false,error:'Could not open capture preview.'}));
+    return true;
+  }
   if(message?.action==='cancel') {
     if(activeSession) {activeSession.cancelled=true;if(activeSession.mode==='region') chrome.scripting.executeScript({target:{tabId:activeSession.tabId},func:snapCancelRegion}).catch(()=>{});}
     reply({ok:true});return false;

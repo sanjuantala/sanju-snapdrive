@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Sanju\u2019s SnapDrive",
-  "version": "1.5.0",
-  "description": "Capture full pages, visible tabs, or selected areas at original pixel quality, then edit in Sanju\u2019s SnapDrive on your Mac.",
+  "version": "1.6.0",
+  "description": "Capture, annotate, copy, and export screenshots in Chrome, or send them to the SnapDrive Mac editor.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2OKwi0OuIOYSVfoH+SDnz0+9dyHJ1np0AzKg8uXDuguWpvbpbAuPeoXk49qvy1qDs7sqKV1pVNb+Tzjn5fSn3Qa5I5Dv+NM2JoPrByA5wAFRBOZSHVXElEPf/zG4gpUIO7XHMWcvBQ49LEMAtY7P5DFtvlJZCXiv3w8w2O/gwzQDakhcTN0ow74mVMLBBLLMrLx/N1r3bL++DEFJQIx1PnLlQkMcuC0tFpJR3kV/jUuctlPDuyBG0kUUPrP5IYajOJFvCQA/yC5cQEnxrhERk83GgFrO0H9IWv0UjdIUqHi3Ezt+A3jWoE5RUDa4eyycWHMemwArr6hpAWd2CRFwyQIDAQAB",
   "permissions": [
     "activeTab",
@@ -30,6 +30,16 @@
         "mac": "Command+Shift+Y"
       },
       "description": "Open SnapDrive capture"
+    },
+    "capture-visible": {
+      "suggested_key": {
+        "default": "Alt+Shift+X",
+        "mac": "Alt+Shift+X"
+      },
+      "description": "Capture visible tab and show quick actions"
+    },
+    "capture-region": {
+      "description": "Capture a selected area and show quick actions"
     }
   },
   "background": {

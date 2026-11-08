@@ -6,12 +6,14 @@ import AppKit
     let model = EditorModel()
     let capture = CaptureService()
     let drive = DriveService()
+    let clipboardPreview = ClipboardCapturePreview()
     var reopen: (() -> Void)?
     var configured = false
     private var lastOpenedFile: (url: URL, time: TimeInterval)?
     func configure() {
         guard !configured else { return }; configured = true
         model.restoreBackground()
+        capture.onCaptureStarted = { [weak self] in self?.clipboardPreview.hide() }
         capture.onCapture = { [weak self] image in
             guard let self else { return }
             self.model.load(image, captured: true, window: self.capture.pendingMode == .window)
@@ -20,8 +22,16 @@ import AppKit
             guard let self else { return }
             let prepared = self.model.captureAppearance(image, window: self.capture.pendingMode == .window)
             if let rendered = ImageEngine.render(image: prepared.image, style: prepared.style, annotations: [], backgroundImage: self.model.activeBackgroundImage), let data = ImageEngine.data(image: rendered, format: "png", quality: 1) {
-                NSPasteboard.general.clearContents(); NSPasteboard.general.setData(data, forType: .png)
+                NSPasteboard.general.clearContents()
+                guard NSPasteboard.general.setData(data, forType: .png) else {
+                    self.capture.status = "Could not copy the screenshot"; return
+                }
                 self.capture.status = "Screenshot copied as lossless PNG"
+                self.clipboardPreview.show(image: rendered) { [weak self] in
+                    guard let self else { return }
+                    self.showEditor()
+                    self.model.load(prepared.image, appearance: prepared.style, notifyNewImage: false)
+                }
             } else { self.capture.status = "Could not render capture for clipboard" }
         }
         capture.onShowEditor = { [weak self] in self?.showEditor() }

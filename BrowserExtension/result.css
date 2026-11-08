@@ -1,0 +1,8 @@
+main {max-width:560px;margin:0 auto;padding:15px}
+.preview {height:clamp(100px,51vh,233px);display:grid;grid-template:minmax(0,1fr) / minmax(0,1fr);place-items:center;overflow:hidden;margin:13px 0 10px;border:1px solid #e3def0;border-radius:13px;background:#eeebf5}
+.preview img {display:block;width:100%;height:100%;min-height:0;object-fit:contain}
+.quick-actions {display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px}
+.quick-actions .control {min-width:0;font-size:11px;padding-inline:7px;gap:4px}
+.quick-actions svg {width:15px;height:15px}
+.status {margin-top:8px}
+@media(max-width:370px) {.quick-actions {grid-template-columns:1fr 1fr}.quick-actions #download {justify-self:start}}

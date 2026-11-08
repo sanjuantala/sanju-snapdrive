@@ -10,7 +10,8 @@ struct ToolIcon: View {
     var menuColor: Color = Color(white: 0.84)
     var body: some View {
         Group {
-            if menuGlyph { LucideGlyph(name: name).stroke(menuColor, style: stroke) }
+            if name == "hand" { Image(systemName: "hand.raised").font(.system(size: size * 0.9, weight: .medium)) }
+            else if menuGlyph { LucideGlyph(name: name).stroke(menuColor, style: stroke) }
             else { LucideGlyph(name: name).stroke(style: stroke) }
         }.frame(width: size, height: size).accessibilityHidden(true)
     }
