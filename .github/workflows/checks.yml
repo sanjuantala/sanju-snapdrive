@@ -1,0 +1,45 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check installer behavior
+        run: ./scripts/test-installer.sh
+      - name: Check browser capture and native connection
+        env:
+          SNAPDRIVE_MODULE_CACHE: ${{ runner.temp }}/snapdrive-module-cache
+        run: ./scripts/test-browser.sh
+      - name: Check native app source
+        run: >-
+          xcrun swiftc -parse-as-library -swift-version 5 -typecheck
+          -target "$(uname -m)-apple-macos13.0" Sources/SnapDrive/*.swift
+      - name: Check tracked text
+        run: |
+          python3 - <<'PY'
+          import pathlib, subprocess
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          for name in filter(None, paths):
+              p = pathlib.Path(name)
+              try:
+                  content = p.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  continue
+              assert chr(0x2014) not in content, f'Em dash found in {name}'
+          print('Tracked text contains no em dashes.')
+          PY

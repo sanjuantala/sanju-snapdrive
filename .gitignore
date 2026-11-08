@@ -1,0 +1,35 @@
+# Local build outputs
+.build/
+.swiftpm/
+build/
+dist/
+release/
+releases/
+*.app/
+*.zip
+*.dmg
+
+# Local files and test output
+.DS_Store
+.AppleDouble
+__pycache__/
+*.pyc
+work/
+private/
+tmp/
+captures/
+
+# Account credentials and signing material
+.env
+.env.*
+!.env.example
+GoogleOAuthPrivate.plist
+client_secret*.json
+credentials*.json
+token*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.keychain
+*.keychain-db

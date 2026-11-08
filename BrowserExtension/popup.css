@@ -1,0 +1,30 @@
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f3f0fb;background:#19181e}
+*{box-sizing:border-box}
+body{margin:0;width:320px}
+main{padding:16px}
+header{display:flex;align-items:center;gap:9px;min-height:32px;margin-bottom:16px}
+header img{flex:none;border-radius:7px}
+header strong{font-size:14px;font-weight:650;letter-spacing:-.2px}
+.badge{margin-left:auto;border:1px solid #bbaaff35;border-radius:5px;padding:3px 5px;font-size:9px;letter-spacing:.5px;color:#c9baff}
+.modes{display:grid;gap:8px}
+button{font:inherit;cursor:pointer}
+.modes button{display:flex;align-items:center;gap:11px;width:100%;min-height:46px;padding:10px 13px;text-align:left;border:1px solid #ffffff12;border-radius:9px;background:#24222c;color:#eae6f5;font-size:13px;font-weight:600;transition:background .12s,border-color .12s}
+.modes button:hover{background:#302b3d;border-color:#a995ee70}
+.modes button.primary{background:#aa96f7;border-color:#c6b5ff;color:#1c1630}
+.modes button.primary:hover{background:#b9a6ff}
+button:disabled{opacity:.5;cursor:wait}
+button:focus-visible,summary:focus-visible,select:focus-visible{outline:2px solid #d6c8ff;outline-offset:3px}
+button svg{flex:none;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+button .next{width:15px;height:15px;margin-left:auto;opacity:.6}
+.resolution{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;font-size:11px;color:#aaa4b8}
+.resolution select{font:inherit;color:#e5def4;background:#24222c;border:1px solid #ffffff1a;border-radius:6px;min-height:28px;padding:3px 7px;max-width:160px}
+.cancel{width:100%;margin-top:11px;min-height:31px;border:1px solid #ffadb72e;border-radius:7px;background:#ff8d9a0a;color:#ffb6c1;font-size:11px}
+.cancel:hover{background:#ff8d9a15}
+.cancel[hidden]{display:none}
+#status{min-height:30px;max-height:80px;overflow:auto;padding-top:11px;font-size:11px;line-height:16px;color:#aaa4b8;overflow-wrap:anywhere}
+#status.error{color:#ffb4bf}
+#status.success{color:#aee4c6}
+details{margin-top:8px;padding-top:10px;border-top:1px solid #ffffff10}
+summary{font-size:11px;color:#bdb3d3;cursor:pointer}
+details p{margin:9px 0 0;font-size:11px;line-height:16px;color:#aaa4b8}
+details b{font-weight:500;color:#e0d8ef}
